@@ -3,8 +3,8 @@ package com.github.kostyasha.it.tests;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.github.kostyasha.it.other.BCallable;
 import com.github.kostyasha.it.other.TestCause;
-import com.github.kostyasha.it.rule.DockerResource;
-import com.github.kostyasha.it.rule.DockerRule;
+import com.github.kostyasha.it.junit.DockerResource;
+import com.github.kostyasha.it.junit.DockerRule;
 import com.github.kostyasha.yad.DockerCloud;
 import com.github.kostyasha.yad.DockerConnector;
 import com.github.kostyasha.yad.DockerContainerLifecycle;
@@ -31,7 +31,6 @@ import org.jenkinsci.plugins.docker.commons.credentials.DockerServerCredentials;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExternalResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,9 +55,6 @@ import static org.mockito.Matchers.isNull;
 public class SimpleBuildTest implements Serializable {
     public static final Logger LOG = LoggerFactory.getLogger(SimpleBuildTest.class);
     private static final long serialVersionUID = 1L;
-    private static final String DOCKER_CLOUD_LABEL = "docker-label";
-    private static final String DOCKER_CLOUD_NAME = "docker-cloud";
-    private static final String TEST_VALUE = "2323re23e";
 
     //TODO redesign rule internals
     @ClassRule
@@ -68,6 +64,10 @@ public class SimpleBuildTest implements Serializable {
     public MyResource dJenkins = new MyResource();
 
     public static class MyResource extends DockerResource {
+        private static final String DOCKER_CLOUD_LABEL = "docker-label";
+        private static final String DOCKER_CLOUD_NAME = "docker-cloud";
+        private static final String TEST_VALUE = "2323re23e";
+
         public String jenkinsId;
         public DockerCLI cli;
 
@@ -144,13 +144,13 @@ public class SimpleBuildTest implements Serializable {
             containerLifecycle.setRemoveContainer(removeContainer);
 
             //template
-            final Entry entry = new Entry("super-key", TEST_VALUE);
+            final Entry entry = new Entry("super-key", MyResource.TEST_VALUE);
             final EnvironmentVariablesNodeProperty nodeProperty = new EnvironmentVariablesNodeProperty(entry);
             final ArrayList<NodeProperty<?>> nodeProperties = new ArrayList<>();
             nodeProperties.add(nodeProperty);
 
             final DockerSlaveTemplate slaveTemplate = new DockerSlaveTemplate();
-            slaveTemplate.setLabelString(DOCKER_CLOUD_LABEL);
+            slaveTemplate.setLabelString(MyResource.DOCKER_CLOUD_LABEL);
             slaveTemplate.setLauncher(launcher);
             slaveTemplate.setMode(Node.Mode.EXCLUSIVE);
             slaveTemplate.setRetentionStrategy(new DockerOnceRetentionStrategy(10));
@@ -161,7 +161,7 @@ public class SimpleBuildTest implements Serializable {
             templates.add(slaveTemplate);
 
             final DockerCloud dockerCloud = new DockerCloud(
-                    DOCKER_CLOUD_NAME,
+                    MyResource.DOCKER_CLOUD_NAME,
                     templates,
                     3,
                     dockerConnector
@@ -188,7 +188,7 @@ public class SimpleBuildTest implements Serializable {
             final FreeStyleProject project = jenkins.createProject(FreeStyleProject.class, "freestyle-project");
             final Shell env = new Shell("env");
             project.getBuildersList().add(env);
-            project.setAssignedLabel(new LabelAtom(DOCKER_CLOUD_LABEL));
+            project.setAssignedLabel(new LabelAtom(MyResource.DOCKER_CLOUD_LABEL));
             project.save();
 
             // test
@@ -200,7 +200,7 @@ public class SimpleBuildTest implements Serializable {
             assertThat(lastBuild, not(isNull()));
             assertThat(lastBuild.getResult(), is(Result.SUCCESS));
 
-            assertThat(getLog(lastBuild), Matchers.containsString(TEST_VALUE));
+            assertThat(getLog(lastBuild), Matchers.containsString(MyResource.TEST_VALUE));
 
             return true;
         }

@@ -4,9 +4,8 @@ import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import com.github.kostyasha.it.other.BCallable;
-import com.github.kostyasha.it.other.TCallable;
-import com.github.kostyasha.it.rule.DockerResource;
-import com.github.kostyasha.it.rule.DockerRule;
+import com.github.kostyasha.it.junit.DockerResource;
+import com.github.kostyasha.it.junit.DockerRule;
 import com.github.kostyasha.yad.DockerCloud;
 import com.github.kostyasha.yad.DockerConnector;
 import com.github.kostyasha.yad.DockerContainerLifecycle;
@@ -26,12 +25,10 @@ import hudson.model.Node;
 import hudson.slaves.JNLPLauncher;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsLocationConfiguration;
-import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExternalResource;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +39,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.github.kostyasha.it.rule.DockerRule.getDockerItDir;
+import static com.github.kostyasha.it.junit.DockerRule.getDockerItDir;
 import static com.github.kostyasha.it.utils.JenkinsRuleHelpers.caller;
 import static com.github.kostyasha.yad.commons.DockerImagePullStrategy.PULL_ALWAYS;
 import static java.util.Objects.nonNull;
@@ -53,9 +50,7 @@ import static java.util.Objects.nonNull;
 @Ignore(value = "docker-java doesn't support docker daemon UsernamePassword auth")
 public class UserNameNginxProxyAuthTest {
     private static final Logger LOG = LoggerFactory.getLogger(UserNameNginxProxyAuthTest.class);
-    private static final String DATA_IMAGE_TAG = UserNameNginxProxyAuthTest.class.getSimpleName().toLowerCase();
-    private static final String HOST_CONTAINER_NAME = UserNameNginxProxyAuthTest.class.getCanonicalName() + "_host";
-    private static final int CONTAINER_PORT = 44445;
+
 
     @ClassRule
     public static DockerRule d = new DockerRule(false);
@@ -66,7 +61,11 @@ public class UserNameNginxProxyAuthTest {
     @Rule
     public NginxResource nginxContainer = new NginxResource();
 
-    public class NginxResource extends DockerResource {
+    public static class NginxResource extends DockerResource {
+        public static final String DATA_IMAGE_TAG = UserNameNginxProxyAuthTest.class.getSimpleName().toLowerCase();
+        public static final String HOST_CONTAINER_NAME = UserNameNginxProxyAuthTest.class.getCanonicalName() + "_host";
+        public static final int CONTAINER_PORT = 44445;
+
         public String hostContainerId;
 
         @Override
@@ -167,7 +166,7 @@ public class UserNameNginxProxyAuthTest {
 
             // prepare Docker Cloud
             final DockerConnector dockerConnector = new DockerConnector(
-                    String.format("http://%s:%d", dockerUri.getHost(), CONTAINER_PORT)
+                    String.format("http://%s:%d", dockerUri.getHost(), NginxResource.CONTAINER_PORT)
             );
             dockerConnector.setCredentialsId(credentials.getId());
             dockerConnector.setConnectTimeout(10);

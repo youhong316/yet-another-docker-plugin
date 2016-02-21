@@ -1,4 +1,4 @@
-package com.github.kostyasha.it.rule;
+package com.github.kostyasha.it.junit;
 
 import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.github.kostyasha.it.other.JenkinsDockerImage;

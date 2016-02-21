@@ -1,7 +1,7 @@
 package com.github.kostyasha.it.tests;
 
-import com.github.kostyasha.it.rule.DockerResource;
-import com.github.kostyasha.it.rule.DockerRule;
+import com.github.kostyasha.it.junit.DockerResource;
+import com.github.kostyasha.it.junit.DockerRule;
 import com.github.kostyasha.it.utils.DockerUtils;
 import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
 import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.NotFoundException;
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 
-import static com.github.kostyasha.it.rule.DockerRule.getDockerItDir;
+import static com.github.kostyasha.it.junit.DockerRule.getDockerItDir;
 import static com.github.kostyasha.it.utils.DockerUtils.ensureContainerRemoved;
 import static java.util.Objects.nonNull;
 import static java.util.Objects.requireNonNull;
