@@ -12,6 +12,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
+
 /**
  * (Very) Pure abstraction to clean up docker specific implementation.
  * Normally it should be in {@link hudson.slaves.AbstractCloudImpl}, but it doesn't provide templates
@@ -27,7 +30,7 @@ public abstract class AbstractCloud extends Cloud {
     protected final HashMap<DockerSlaveTemplate, Integer> provisionedImages = new HashMap<>();
 
     @Nonnull
-    protected List<DockerSlaveTemplate> templates = Collections.emptyList();
+    protected List<DockerSlaveTemplate> templates = new ArrayList<>(0);
 
     /**
      * Total max allowed number of containers
@@ -92,14 +95,14 @@ public abstract class AbstractCloud extends Cloud {
      */
     @Nonnull
     public List<DockerSlaveTemplate> getTemplates(Label label) {
-        ArrayList<DockerSlaveTemplate> dockerSlaveTemplates = new ArrayList<>();
+        List<DockerSlaveTemplate> dockerSlaveTemplates = new ArrayList<>();
 
         for (DockerSlaveTemplate t : templates) {
-            if (label == null && t.getMode() == Node.Mode.NORMAL) {
+            if (isNull(label) && t.getMode() == Node.Mode.NORMAL) {
                 dockerSlaveTemplates.add(t);
             }
 
-            if (label != null && label.matches(t.getLabelSet())) {
+            if (nonNull(label) && label.matches(t.getLabelSet())) {
                 dockerSlaveTemplates.add(t);
             }
         }

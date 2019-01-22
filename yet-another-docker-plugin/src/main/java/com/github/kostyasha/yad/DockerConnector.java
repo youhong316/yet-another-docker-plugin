@@ -3,22 +3,23 @@ package com.github.kostyasha.yad;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardCredentials;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.DockerException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.Version;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.RemoteApiVersion;
-import com.github.kostyasha.yad.docker_java.com.google.common.base.Preconditions;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.StringUtils;
+import com.github.kostyasha.yad.connector.YADockerConnector;
 import com.github.kostyasha.yad.other.ConnectorType;
 import com.github.kostyasha.yad.utils.CredentialsListBoxModel;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.DockerClient;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.DockerException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Version;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.RemoteApiVersion;
+import com.github.kostyasha.yad_docker_java.com.google.common.base.Preconditions;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.StringUtils;
+import com.github.kostyasha.yad_docker_java.org.glassfish.jersey.client.ClientProperties;
 import com.google.common.base.Throwables;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
-import hudson.model.Describable;
-import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.security.ACL;
+import hudson.security.AccessControlled;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
@@ -28,8 +29,10 @@ import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -37,19 +40,20 @@ import java.util.Collections;
 import java.util.List;
 
 import static com.github.kostyasha.yad.client.ClientBuilderForConnector.newClientBuilderForConnector;
-import static com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.RemoteApiVersion.parseConfig;
 import static com.github.kostyasha.yad.other.ConnectorType.NETTY;
+import static com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.RemoteApiVersion.parseConfig;
 import static hudson.util.FormValidation.ok;
 import static hudson.util.FormValidation.warning;
 import static org.apache.commons.lang.builder.ToStringBuilder.reflectionToString;
 import static org.apache.commons.lang.builder.ToStringStyle.MULTI_LINE_STYLE;
 
 /**
- * Settings for connecting to docker.
+ * Settings for connecting to docker via docker-java configured connection.
  *
  * @author Kanstantsin Shautsou
  */
-public class DockerConnector implements Describable<DockerConnector> {
+public class DockerConnector extends YADockerConnector {
+    private static final long serialVersionUID = 1L;
 
     @CheckForNull
     private String serverUrl;
@@ -57,15 +61,23 @@ public class DockerConnector implements Describable<DockerConnector> {
     @CheckForNull
     private String apiVersion;
 
-    private transient Boolean tlsVerify;
+    @CheckForNull
+    private Boolean tlsVerify;
 
     @CheckForNull
     private String credentialsId = null;
 
     @CheckForNull
-    private transient DockerClient client = null;
-
     private ConnectorType connectorType = NETTY;
+
+    @CheckForNull
+    private Integer connectTimeout; //ms
+
+    @CheckForNull
+    private Integer readTimeout; //ms
+
+    @CheckForNull
+    private transient DockerClient client = null;
 
     @DataBoundConstructor
     public DockerConnector(String serverUrl) {
@@ -111,6 +123,35 @@ public class DockerConnector implements Describable<DockerConnector> {
     @DataBoundSetter
     public void setConnectorType(ConnectorType connectorType) {
         this.connectorType = connectorType;
+    }
+
+    public Integer getConnectTimeout() {
+        return connectTimeout;
+    }
+
+    @DataBoundSetter
+    public void setConnectTimeout(Integer connectTimeout) {
+        this.connectTimeout = connectTimeout;
+    }
+
+    @CheckForNull
+    public Integer getReadTimeout() {
+        return readTimeout;
+    }
+
+    /**
+     * @see ClientProperties#READ_TIMEOUT
+     */
+    @DataBoundSetter
+    public void setReadTimeout(Integer readTimeout) {
+        this.readTimeout = readTimeout;
+    }
+
+    public DockerClient getFreshClient() throws GeneralSecurityException {
+        client = newClientBuilderForConnector()
+                .withDockerConnector(this)
+                .build();
+        return client;
     }
 
     public DockerClient getClient() {
@@ -159,6 +200,8 @@ public class DockerConnector implements Describable<DockerConnector> {
                 .append(credentialsId, that.credentialsId)
                 .append(tlsVerify, that.tlsVerify)
                 .append(connectorType, that.connectorType)
+                .append(connectTimeout, that.connectTimeout)
+                .append(readTimeout, that.readTimeout)
                 .isEquals();
     }
 
@@ -170,34 +213,41 @@ public class DockerConnector implements Describable<DockerConnector> {
                 .append(credentialsId)
                 .append(tlsVerify)
                 .append(connectorType)
+                .append(connectTimeout)
+                .append(readTimeout)
                 .toHashCode();
     }
 
-    @Override
-    public Descriptor<DockerConnector> getDescriptor() {
-        return (DescriptorImpl) Jenkins.getActiveInstance().getDescriptor(DockerConnector.class);
-    }
+    @Extension(ordinal = 100)
+    public static class DescriptorImpl extends YADockerConnectorDescriptor {
 
-
-    @Extension
-    public static class DescriptorImpl extends Descriptor<DockerConnector> {
-
+        @RequirePOST
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context) {
+            AccessControlled ac = (context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance());
+            if (!ac.hasPermission(Jenkins.ADMINISTER)) {
+                return new ListBoxModel();
+            }
+
             List<StandardCredentials> credentials =
-                    CredentialsProvider.lookupCredentials(StandardCredentials.class, context, ACL.SYSTEM,
+                    CredentialsProvider.lookupCredentials(StandardCredentials.class,
+                            context,
+                            ACL.SYSTEM,
                             Collections.emptyList());
 
             return new CredentialsListBoxModel()
-                    .withEmptySelection()
+                    .includeEmptyValue()
                     .withMatching(CredentialsMatchers.always(), credentials);
         }
 
         @SuppressFBWarnings(value = "REC_CATCH_EXCEPTION", justification = "docker-java uses runtime exceptions")
+        @RequirePOST
         public FormValidation doTestConnection(
                 @QueryParameter String serverUrl,
                 @QueryParameter String apiVersion,
                 @QueryParameter String credentialsId,
-                @QueryParameter ConnectorType connectorType
+                @QueryParameter ConnectorType connectorType,
+                @QueryParameter Integer connectTimeout,
+                @QueryParameter Integer readTimeout
         ) throws IOException, ServletException, DockerException {
             try {
                 DefaultDockerClientConfig.Builder configBuilder = new DefaultDockerClientConfig.Builder()
@@ -207,7 +257,9 @@ public class DockerConnector implements Describable<DockerConnector> {
                 final DockerClient testClient = newClientBuilderForConnector()
                         .withConfigBuilder(configBuilder)
                         .withConnectorType(connectorType)
-                        .withCredentials(credentialsId)
+                        .withCredentialsId(credentialsId)
+                        .withConnectTimeout(connectTimeout)
+                        .withReadTimeout(readTimeout)
                         .build();
 
                 Version verResult = testClient.versionCmd().exec();
@@ -237,9 +289,10 @@ public class DockerConnector implements Describable<DockerConnector> {
             return ok();
         }
 
+        @Nonnull
         @Override
         public String getDisplayName() {
-            return "Docker Connector";
+            return "Direct Docker Connector";
         }
     }
 }

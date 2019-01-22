@@ -9,13 +9,18 @@ import com.github.kostyasha.yad.DockerCloud;
 import com.github.kostyasha.yad.DockerConnector;
 import com.github.kostyasha.yad.DockerConnector.DescriptorImpl;
 import com.github.kostyasha.yad.DockerContainerLifecycle;
+import com.github.kostyasha.yad.DockerNodeProperty;
 import com.github.kostyasha.yad.DockerSlaveTemplate;
 import com.github.kostyasha.yad.commons.DockerPullImage;
 import com.github.kostyasha.yad.commons.DockerRemoveContainer;
+import com.github.kostyasha.yad.connector.CloudNameDockerConnector;
 import com.github.kostyasha.yad.launcher.DockerComputerJNLPLauncher;
 import com.github.kostyasha.yad.other.ConnectorType;
+import com.github.kostyasha.yad.steps.DockerShellStep;
 import com.github.kostyasha.yad.strategy.DockerOnceRetentionStrategy;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.PullImageResultCallback;
 import hudson.cli.DockerCLI;
+import hudson.logging.LogRecorder;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Node;
@@ -23,7 +28,6 @@ import hudson.model.Result;
 import hudson.model.labels.LabelAtom;
 import hudson.slaves.EnvironmentVariablesNodeProperty;
 import hudson.slaves.EnvironmentVariablesNodeProperty.Entry;
-import hudson.slaves.JNLPLauncher;
 import hudson.slaves.NodeProperty;
 import hudson.tasks.Shell;
 import hudson.util.FormValidation;
@@ -34,8 +38,8 @@ import org.jenkinsci.plugins.docker.commons.credentials.DockerServerCredentials;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExternalResource;
-import org.jvnet.hudson.test.For;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,14 +47,19 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
 
 import static com.github.kostyasha.it.utils.JenkinsRuleHelpers.caller;
 import static com.github.kostyasha.it.utils.JenkinsRuleHelpers.waitUntilNoActivityUpTo;
 import static com.github.kostyasha.yad.commons.DockerImagePullStrategy.PULL_LATEST;
+import static com.github.kostyasha.yad.other.ConnectorType.JERSEY;
+import static java.util.Objects.requireNonNull;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertThat;
 import static org.jvnet.hudson.test.JenkinsRule.getLog;
 import static org.mockito.Matchers.isNull;
@@ -58,12 +67,27 @@ import static org.mockito.Matchers.isNull;
 /**
  * @author Kanstantsin Shautsou
  */
-public class SimpleBuildTest implements Serializable {
-    public static final Logger LOG = LoggerFactory.getLogger(SimpleBuildTest.class);
+@RunWith(Parameterized.class)
+public class FreestyleTest implements Serializable {
+    public static final Logger LOG = LoggerFactory.getLogger(FreestyleTest.class);
     private static final long serialVersionUID = 1L;
     private static final String DOCKER_CLOUD_LABEL = "docker-label";
     private static final String DOCKER_CLOUD_NAME = "docker-cloud";
     private static final String TEST_VALUE = "2323re23e";
+    private static final String CONTAINER_ID = "CONTAINER_ID";
+    private static final String CLOUD_ID = "CLOUD_ID";
+    private static final String DOCKER_HOST = "SOME_HOST";
+
+    @Parameterized.Parameters(name = "{0}")
+    public static Iterable<String> data() {
+        return Arrays.asList(
+                DockerRule.SLAVE_IMAGE_JNLP,
+                "java:8-jdk-alpine"
+        );
+    }
+
+    @Parameterized.Parameter
+    public static String slaveJnlpImage;
 
     //TODO redesign rule internals
     @ClassRule
@@ -76,12 +100,14 @@ public class SimpleBuildTest implements Serializable {
         public String jenkinsId;
         public DockerCLI cli;
 
-        public void call(BCallable callable) throws Throwable {
-            caller(cli, callable);
+        public Boolean call(BCallable callable) throws Throwable {
+            return caller(cli, callable);
         }
 
         @Override
         protected void before() throws Throwable {
+            d.getDockerCli().pullImageCmd(slaveJnlpImage).exec(new PullImageResultCallback()).awaitSuccess();
+
             jenkinsId = d.runFreshJenkinsContainer(PULL_LATEST, false);
             cli = d.createCliForContainer(jenkinsId);
             LOG.trace("CLI prepared, preparing cloud");
@@ -89,6 +115,7 @@ public class SimpleBuildTest implements Serializable {
             assertThat(cli.jenkins, notNullValue());
             assertThat(d, notNullValue());
             assertThat(d.clientConfig, notNullValue());
+            assertThat(slaveJnlpImage, notNullValue());
 
             LOG.trace("Creating  PrepareCloudCallable object");
             try {
@@ -96,7 +123,7 @@ public class SimpleBuildTest implements Serializable {
                         cli.jenkins.getPort(),
                         d.getDockerServerCredentials(),
                         d.clientConfig.getDockerHost(),
-                        DockerRule.SLAVE_IMAGE_JNLP
+                        slaveJnlpImage
                 );
                 LOG.trace("Calling caller.");
                 caller(cli, prepareCloudCallable);
@@ -140,7 +167,13 @@ public class SimpleBuildTest implements Serializable {
 
         @Override
         public Boolean call() throws Throwable {
-            final Jenkins jenkins = Jenkins.getActiveInstance();
+            final Jenkins jenkins = Jenkins.getInstance();
+
+            String logName = "com.github.kostyasha.yad";
+            final LogRecorder logRecorder = new LogRecorder(logName);
+            logRecorder.targets.add(new LogRecorder.Target("com.github.kostyasha.yad", Level.ALL));
+            jenkins.getLog().logRecorders.put("logName", logRecorder);
+            logRecorder.save();
 
             // prepare jenkins global (url, cred)
             JenkinsLocationConfiguration.get().setUrl(String.format("http://%s:%d", dockerUri.getHost(), jenkinsPort));
@@ -150,17 +183,22 @@ public class SimpleBuildTest implements Serializable {
             //verify doTestConnection
             final DescriptorImpl descriptor = (DescriptorImpl) jenkins.getDescriptor(DockerConnector.class);
             checkFormValidation(descriptor.doTestConnection(dockerUri.toString(), "",
-                    dockerServerCredentials.getId(), ConnectorType.NETTY));
+                    dockerServerCredentials.getId(), ConnectorType.NETTY, 10 * 1000, 11 * 1000));
             checkFormValidation(descriptor.doTestConnection(dockerUri.toString(), "",
-                    dockerServerCredentials.getId(), ConnectorType.JERSEY));
+                    dockerServerCredentials.getId(), JERSEY, 10 * 1000, 11 * 1000));
 
             // prepare Docker Cloud
             final DockerConnector dockerConnector = new DockerConnector(dockerUri.toString());
             dockerConnector.setCredentialsId(dockerServerCredentials.getId());
+            dockerConnector.setConnectTimeout(10 * 1000);
+            dockerConnector.setReadTimeout(0);
+            dockerConnector.setConnectorType(JERSEY);
             dockerConnector.testConnection();
 
             //launcher
-            final DockerComputerJNLPLauncher launcher = new DockerComputerJNLPLauncher(new JNLPLauncher());
+            final DockerComputerJNLPLauncher launcher = new DockerComputerJNLPLauncher();
+            launcher.setNoCertificateCheck(true);
+            launcher.setJvmOpts("-XX:-PrintClassHistogram");
             final DockerPullImage pullImage = new DockerPullImage();
             pullImage.setPullStrategy(PULL_LATEST);
 
@@ -178,10 +216,14 @@ public class SimpleBuildTest implements Serializable {
             //template
             final Entry entry = new Entry("super-key", TEST_VALUE);
             final EnvironmentVariablesNodeProperty nodeProperty = new EnvironmentVariablesNodeProperty(entry);
+
             final ArrayList<NodeProperty<?>> nodeProperties = new ArrayList<>();
             nodeProperties.add(nodeProperty);
+            nodeProperties.add(new DockerNodeProperty(CONTAINER_ID, CLOUD_ID, DOCKER_HOST));
+
 
             final DockerSlaveTemplate slaveTemplate = new DockerSlaveTemplate();
+            slaveTemplate.setMaxCapacity(4);
             slaveTemplate.setLabelString(DOCKER_CLOUD_LABEL);
             slaveTemplate.setLauncher(launcher);
             slaveTemplate.setMode(Node.Mode.EXCLUSIVE);
@@ -198,7 +240,6 @@ public class SimpleBuildTest implements Serializable {
                     3,
                     dockerConnector
             );
-
             jenkins.clouds.add(dockerCloud);
             jenkins.save(); // either xmls a half broken
 
@@ -214,13 +255,17 @@ public class SimpleBuildTest implements Serializable {
 
     @Test
     public void freestyleProjectBuilds() throws Throwable {
-        dJenkins.call(new FreestyleProjectBuildCallable());
+        try {
+            dJenkins.call(new FreestyleProjectBuildCallable());
+        } catch (Exception ex) {
+            throw ex;
+        }
     }
 
     private static class FreestyleProjectBuildCallable extends BCallable {
         @Override
         public Boolean call() throws Throwable {
-            final Jenkins jenkins = Jenkins.getActiveInstance();
+            final Jenkins jenkins = Jenkins.getInstance();
 
             // prepare job
             final FreeStyleProject project = jenkins.createProject(FreeStyleProject.class, "freestyle-project");
@@ -236,10 +281,59 @@ public class SimpleBuildTest implements Serializable {
             waitUntilNoActivityUpTo(jenkins, 10 * 60 * 1000);
 
             final FreeStyleBuild lastBuild = project.getLastBuild();
-            assertThat(lastBuild, not(isNull()));
+            assertThat(lastBuild, not(nullValue()));
             assertThat(lastBuild.getResult(), is(Result.SUCCESS));
 
             assertThat(getLog(lastBuild), Matchers.containsString(TEST_VALUE));
+            assertThat(getLog(lastBuild), Matchers.containsString(CLOUD_ID + "=" + DOCKER_CLOUD_NAME));
+
+            return true;
+        }
+    }
+
+    @Test
+    public void dockerShell() throws Throwable {
+        Boolean result = dJenkins.call(new DockerShellCallable(slaveJnlpImage));
+        assertThat(result, is(true));
+    }
+
+    private static class DockerShellCallable extends BCallable {
+        private String image;
+
+        public DockerShellCallable(String image) {
+            this.image = image;
+        }
+
+        @Override
+        public Boolean call() throws Throwable {
+            final Jenkins jenkins = Jenkins.getInstance();
+            assertThat(image, notNullValue());
+
+            // prepare job
+            final FreeStyleProject project = jenkins.createProject(FreeStyleProject.class, "freestyle-dockerShell");
+            final Shell env = new Shell("env");
+            project.getBuildersList().add(env);
+
+            DockerShellStep dockerShellStep = new DockerShellStep();
+            dockerShellStep.setShellScript("env && pwd");
+            dockerShellStep.getContainerLifecycle().setImage(image);
+            dockerShellStep.setConnector(new CloudNameDockerConnector(DOCKER_CLOUD_NAME));
+            project.getBuildersList().add(dockerShellStep);
+
+//            project.setAssignedLabel(new LabelAtom(DOCKER_CLOUD_LABEL));
+            project.save();
+
+            LOG.trace("trace test.");
+            project.scheduleBuild(new TestCause());
+
+            // image pull may take time
+            waitUntilNoActivityUpTo(jenkins, 10 * 60 * 1000);
+
+            final FreeStyleBuild lastBuild = project.getLastBuild();
+            assertThat(lastBuild, not(nullValue()));
+            assertThat(lastBuild.getResult(), is(Result.SUCCESS));
+
+            assertThat(getLog(lastBuild), Matchers.containsString("exit code: 0"));
 
             return true;
         }

@@ -1,13 +1,15 @@
 package com.github.kostyasha.yad;
 
 import com.github.kostyasha.yad.action.DockerTerminateCmdAction;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.NotModifiedException;
-import com.github.kostyasha.yad.docker_java.com.google.common.base.MoreObjects;
+import com.github.kostyasha.yad.queue.FlyweightCauseOfBlockage;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.DockerClient;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.NotModifiedException;
+import com.github.kostyasha.yad_docker_java.com.google.common.base.MoreObjects;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
+import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.TaskListener;
 import hudson.model.queue.CauseOfBlockage;
@@ -15,21 +17,28 @@ import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.Cloud;
 import hudson.slaves.ComputerLauncher;
 import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.cloudstats.CloudStatistics;
+import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
+import org.jenkinsci.plugins.cloudstats.TrackedItem;
+import org.kohsuke.stapler.StaplerRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 
+import static java.util.Objects.nonNull;
 
 /**
- * Jenkins Slave with yad specific configuration
+ * Jenkins Slave with yad specific configuration.
  */
 @SuppressFBWarnings(value = "SE_BAD_FIELD",
         justification = "Broken serialization https://issues.jenkins-ci.org/browse/JENKINS-31916")
-public class DockerSlave extends AbstractCloudSlave {
+public class DockerSlave extends AbstractCloudSlave implements TrackedItem {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(DockerSlave.class);
 
@@ -52,8 +61,10 @@ public class DockerSlave extends AbstractCloudSlave {
 
     private String displayName;
 
+    protected ProvisioningActivity.Id provisioningId;
+
     public DockerSlave(String slaveName, String nodeDescription, ComputerLauncher launcher, String containerId,
-                       DockerSlaveTemplate dockerSlaveTemplate, String cloudId)
+                       DockerSlaveTemplate dockerSlaveTemplate, String cloudId, ProvisioningActivity.Id provisioningId)
             throws IOException, Descriptor.FormException {
         super(slaveName,
                 nodeDescription, //description
@@ -69,6 +80,7 @@ public class DockerSlave extends AbstractCloudSlave {
         this.containerId = containerId;
         this.cloudId = cloudId;
         setDockerSlaveTemplate(dockerSlaveTemplate);
+        this.provisioningId = provisioningId;
     }
 
     public String getContainerId() {
@@ -89,7 +101,7 @@ public class DockerSlave extends AbstractCloudSlave {
 
     @Nonnull
     public DockerCloud getCloud() {
-        final Cloud cloud = Jenkins.getActiveInstance().getCloud(getCloudId());
+        final Cloud cloud = Jenkins.getInstance().getCloud(getCloudId());
 
         if (cloud == null) {
             throw new RuntimeException("Docker template " + dockerSlaveTemplate + " has no assigned Cloud.");
@@ -132,16 +144,22 @@ public class DockerSlave extends AbstractCloudSlave {
     }
 
     @Override
+    public Node reconfigure(StaplerRequest req, JSONObject form) throws Descriptor.FormException {
+        return null;
+    }
+
+    @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         final DockerContainerLifecycle dockerContainerLifecycle = dockerSlaveTemplate.getDockerContainerLifecycle();
         try {
             LOG.info("Requesting disconnect for computer: '{}'", name);
             final Computer toComputer = toComputer();
             if (toComputer != null) {
-                toComputer.disconnect(new DockerOfflineCause());
+                toComputer.disconnect(new DockerOfflineCause("Terminating from _terminate."));
             }
         } catch (Exception e) {
             LOG.error("Can't disconnect computer: '{}'", name, e);
+            listener.error("Can't disconnect computer: " + name);
         }
 
         if (StringUtils.isNotBlank(containerId)) {
@@ -175,6 +193,17 @@ public class DockerSlave extends AbstractCloudSlave {
         } else {
             LOG.error("ContainerId is absent, no way to remove/stop container");
         }
+
+        ProvisioningActivity activity = CloudStatistics.get().getActivityFor(this);
+        if (nonNull(activity)) {
+            activity.enterIfNotAlready(ProvisioningActivity.Phase.COMPLETED);
+        }
+    }
+
+    @Nullable
+    @Override
+    public ProvisioningActivity.Id getId() {
+        return provisioningId;
     }
 
     public DockerClient getClient() {

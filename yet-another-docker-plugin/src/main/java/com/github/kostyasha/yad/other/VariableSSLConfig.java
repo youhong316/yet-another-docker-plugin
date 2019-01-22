@@ -1,9 +1,9 @@
 package com.github.kostyasha.yad.other;
 
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.DockerClientException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.SSLConfig;
-import com.github.kostyasha.yad.docker_java.org.bouncycastle.jce.provider.BouncyCastleProvider;
-import com.github.kostyasha.yad.docker_java.org.glassfish.jersey.SslConfigurator;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.DockerClientException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.SSLConfig;
+import com.github.kostyasha.yad_docker_java.org.bouncycastle.jce.provider.BouncyCastleProvider;
+import com.github.kostyasha.yad_docker_java.org.glassfish.jersey.SslConfigurator;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import javax.net.ssl.SSLContext;
@@ -14,9 +14,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.Security;
 import java.security.UnrecoverableKeyException;
 
-import static com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.util.CertificateUtils.createKeyStore;
-import static com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.util.CertificateUtils.createTrustStore;
-import static java.util.Objects.nonNull;
+import static com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.util.CertificateUtils.createKeyStore;
+import static com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.util.CertificateUtils.createTrustStore;
 import static org.apache.commons.lang.StringUtils.isNotBlank;
 
 /**
@@ -42,13 +41,8 @@ public class VariableSSLConfig implements SSLConfig, Serializable {
         try {
             Security.addProvider(new BouncyCastleProvider());
 
-            // properties acrobatics not needed for java > 1.6
-            String httpProtocols = System.getProperty("https.protocols");
-            System.setProperty("https.protocols", "TLSv1");
             SslConfigurator sslConfig = SslConfigurator.newInstance(true);
-            if (nonNull(httpProtocols)) {
-                System.setProperty("https.protocols", httpProtocols);
-            }
+            sslConfig.securityProtocol("TLSv1.2");
 
             // add keystore
             sslConfig.keyStore(createKeyStore(keypem, certpem));

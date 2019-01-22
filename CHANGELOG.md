@@ -1,6 +1,125 @@
+##
 
+## 0.1.0-rc48
+- Allow add additional labels to created containers.
+- Don't enforce root for container creation in JNLP launher (still possible to set it manually in Create Container).
 
-## Next
+## 0.1.0-rc47
+- Print log when container started, but node is null.
+
+## 0.1.0-rc46
+- Added provisioning strategies across DockerClouds. Old and new random least loaded.
+- Improved help message for Links and Network mode fields
+
+## 0.1.0-rc45
+- Make slave variables optional
+- Execute init scripts under roor (in case Dockerfile had redefined default user)
+
+## 0.1.0-rc44
+- Workaround pulling issues.
+- Switch to finally released maven-shade-plugin with relaxed maven-enforcer requirements.
+- docker-java 3.0.14.
+- Update groovy script.
+
+## 0.1.0-rc43
+- Don't call daemon and exclude redundant pull for LATEST pulling strategy.
+- [criritical] Remove Queue lock delay and potential queue lock out.
+- Experimental IO launcher.
+
+## 0.1.0-rc42
+- Automatically add exposed port for ssh launcher.
+- IT for dockerShell.
+
+## 0.1.0-rc41
+- Update plugin-pom and ITs.
+- dockerShell step updates after testing.
+
+## 0.1.0-rc40
+- No visible updates to user (buildArgs in comboimage, log print for single slave)
+
+## 0.1.0-rc39
+- experimental dockerShell step
+- command arg parser
+- attempt to have list of creds (blocked by docker-java now)
+- image pulling with verbose logging
+- new fields
+- debug code for RWX issue
+
+## 0.1.0-rc38
+- Reconnect JNLP agents and container restart policy options.
+- Fix timeouts for jnlp launcher save.
+- Add shmsize in container create options.
+- docker-java 3.0.13 with different fixes.
+- Do not require bash.
+- Fix dependency scope.
+- Use docker-java-3.0.11
+
+## 0.1.0-rc37
+- Support Jenkins JNLP agents on Windows-based Docker infrastructure.
+- Include readTimeout in DockerConnector equals/hashCode.
+- Use 3.0.10 docker-java.
+- Do not require the port binding for the ssh service. 
+
+## 0.1.0-rc36
+- Support more images for JNLP launcher
+- Print error logs into listener (ideally in future should be exposed to cloud-stats-plugin)
+
+## 0.1.0-rc35
+- Non-ui image builder/pusher.
+
+## 0.1.0-rc34
+- Example of DockerCloud global settings reconfiguration from @samrocketman
+- Fix dropdown button for docker templates.
+- Throw DockerSimpleBuildWrapper errors.
+- Allow setting readTimeouts.
+
+## 0.1.0-rc33
+- Docker Simple BuildWrapper for external specific use case.
+- Use docker-java 3.0.9
+
+## 0.1.0-rc32 (failed release)
+
+## 0.1.0-rc31
+- Bypass strictVerification from JNLPLauncher
+- Add cloud-stats-plugin (half worked, plugin missing integration points)
+
+## 0.1.0-rc30
+- Possibly fix overprovisioning.
+
+## 0.1.0-rc29
+- Support dash?
+
+## 0.1.0-rc28
+- Sync durable-task Once retention strategy implementation.
+- Fix DockerCloudRetentionStrategy regression (was broken since 0.1.0-rc25).
+- Fix logging messages.
+- JNLP launcher:
+  - No certificate check option.
+  - Allow custom settings.
+  - Use adduser, gosu (Support stock jdk alpine image).
+
+## 0.1.0-rc27
+- [fix #83] Don't exclude Demand strategy. 
+- Form validation for Links
+
+## 0.1.0-rc26
+ - Add links to create options
+
+## 0.1.0-rc25
+ - jucies is optional dep.
+ - Fix idle timeout persistence.
+
+## 0.1.0-rc24
+ - Update to docker-java 3.0.6. (Support unix socket for JERSEY impl).
+
+## 0.1.0-rc23
+ - Don't print NPE warn in system log. On < 2.12 core will show strategies in global settings.
+
+## 0.1.0-rc22
+ - Fix provisioning strategy.
+
+## 0.1.0-rc21
+ - More logging for ssh launcher.
 
 ## 0.1.0-rc20
  - Fix load private key generated with linux openssl.

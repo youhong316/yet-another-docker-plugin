@@ -12,17 +12,17 @@ import com.github.kostyasha.yad.DockerContainerLifecycle;
 import com.github.kostyasha.yad.DockerSlaveTemplate;
 import com.github.kostyasha.yad.commons.DockerPullImage;
 import com.github.kostyasha.yad.commons.DockerRemoveContainer;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.NotFoundException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.BuildResponseItem;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.PortBinding;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.io.FileUtils;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.StringUtils;
 import com.github.kostyasha.yad.launcher.DockerComputerJNLPLauncher;
 import com.github.kostyasha.yad.strategy.DockerOnceRetentionStrategy;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.NotFoundException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.BuildResponseItem;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.HostConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.PortBinding;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.io.FileUtils;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.StringUtils;
 import hudson.cli.DockerCLI;
 import hudson.model.Node;
-import hudson.slaves.JNLPLauncher;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsLocationConfiguration;
 import org.junit.ClassRule;
@@ -42,6 +42,7 @@ import java.util.List;
 import static com.github.kostyasha.it.rule.DockerRule.getDockerItDir;
 import static com.github.kostyasha.it.utils.JenkinsRuleHelpers.caller;
 import static com.github.kostyasha.yad.commons.DockerImagePullStrategy.PULL_ALWAYS;
+import static com.github.kostyasha.yad.other.ConnectorType.JERSEY;
 import static java.util.Objects.nonNull;
 
 /**
@@ -111,8 +112,10 @@ public class UserNameNginxProxyAuthTest {
 
             hostContainerId = d.getDockerCli().createContainerCmd(imageId)
                     .withName(HOST_CONTAINER_NAME)
+                    .withHostConfig(HostConfig.newHostConfig()
+                            .withPortBindings(PortBinding.parse("0.0.0.0:" + CONTAINER_PORT + ":" + CONTAINER_PORT))
+                    )
 //                .withExposedPorts(new ExposedPort(4243))
-                    .withPortBindings(PortBinding.parse("0.0.0.0:" + CONTAINER_PORT + ":" + CONTAINER_PORT))
 //                .withPortSpecs(String.format("%d/tcp", CONTAINER_PORT))
                     .exec()
                     .getId();
@@ -168,12 +171,14 @@ public class UserNameNginxProxyAuthTest {
             final DockerConnector dockerConnector = new DockerConnector(
                     String.format("tcp://%s:%d", dockerUri.getHost(), CONTAINER_PORT)
             );
+            dockerConnector.setConnectTimeout(50 * 1000);
+            dockerConnector.setConnectorType(JERSEY);
             dockerConnector.setCredentialsId(credentials.getId());
             dockerConnector.testConnection();
 //            final Version version = dockerConnector.getClient().versionCmd().exec();
 //            LOG.info("Version {}", version);
 
-            final DockerComputerJNLPLauncher launcher = new DockerComputerJNLPLauncher(new JNLPLauncher());
+            final DockerComputerJNLPLauncher launcher = new DockerComputerJNLPLauncher();
             final DockerPullImage pullImage = new DockerPullImage();
             pullImage.setPullStrategy(PULL_ALWAYS);
 

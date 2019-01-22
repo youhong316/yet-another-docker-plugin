@@ -14,8 +14,8 @@ if (instance == null) {
     instance = new DockerSlaveTemplate();
 }
 
-f.invisibleEntry() {
-    f.textbox(field: "id")
+f.entry(title: "Internal template ID") {
+    f.textbox(field: "id", readonly: "true")
 }
 
 f.entry(title: _("Max Instances"), field: "maxCapacity") {
@@ -44,7 +44,7 @@ f.section(title: _("Jenkins Slave Config")) {
     f.advanced(title: _("Experimental Options"), align: "left") {
         f.dropdownList(name: "retentionStrategy", title: _("Availability"),
                 help: "/help/system-config/master-slave/availability.html") {
-            DockerFunctions.dockerRetentionStrategyDescriptors.each { sd ->
+            DockerFunctions.getRetentionStrategyDescriptors().each { sd ->
                 if (sd != null) {
                     def prefix = sd.displayName.equals("Docker Once Retention Strategy") ? "" : "Experimental: "
 
@@ -91,11 +91,15 @@ f.section(title: _("Jenkins Slave Config")) {
         }
     }
 
-    f.descriptorList(
-            title: _("Node Properties"),
-            descriptors: h.getNodePropertyDescriptors(Slave.class),
-            field: "nodePropertiesUI"
-    )
+    f.entry(title: _("Node Properties")) {
+        f.hetero_list(
+                descriptors: DockerFunctions.getNodePropertyDescriptors(Slave.class),
+                items: instance.nodeProperties,
+                oneEach: true,
+                hasHeader: true,
+                name: "nodeProperties"
+        )
+    }
 
     f.entry(title: _("Remote FS Root Mapping"), field: "remoteFsMapping") {
         f.textbox()

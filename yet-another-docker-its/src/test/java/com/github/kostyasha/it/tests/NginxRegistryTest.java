@@ -2,26 +2,26 @@ package com.github.kostyasha.it.tests;
 
 import com.github.kostyasha.it.rule.DockerResource;
 import com.github.kostyasha.it.rule.DockerRule;
-import com.github.kostyasha.it.other.WaitMessageResultCallback;
 import com.github.kostyasha.it.utils.DockerUtils;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.DockerCmdExecFactory;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.NotFoundException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.AuthConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.BuildResponseItem;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.ExposedPort;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.PortBinding;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.RestartPolicy;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DockerClientBuilder;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DockerClientConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.PullImageResultCallback;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.PushImageResultCallback;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.jaxrs.JerseyDockerCmdExecFactory;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.io.FileUtils;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.StringUtils;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.DockerClient;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.DockerCmdExecFactory;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.NotFoundException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.AuthConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.BuildResponseItem;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.ExposedPort;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.HostConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.PortBinding;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.RestartPolicy;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DockerClientBuilder;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DockerClientConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.PullImageResultCallback;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.PushImageResultCallback;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.jaxrs.JerseyDockerCmdExecFactory;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.io.FileUtils;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.StringUtils;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -39,10 +39,7 @@ import static com.github.kostyasha.it.utils.DockerUtils.ensureContainerRemoved;
 import static com.github.kostyasha.it.utils.TempFileHelper.checkPathIT;
 import static java.util.Objects.nonNull;
 import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.commons.io.FileUtils.writeStringToFile;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.Is.is;
 
 /**
  * client -> (DinD:44447) -> (nginx-proxy) -> (docker-registry:44446)
@@ -92,13 +89,15 @@ public class NginxRegistryTest {
 
             hostContainerId = d.getDockerCli().createContainerCmd(IMAGE_NAME)
                     .withName(HOST_CONTAINER_NAME)
-                    .withPrivileged(true)
-                    .withRestartPolicy(RestartPolicy.alwaysRestart())
+                    .withHostConfig(HostConfig.newHostConfig()
+                            .withPrivileged(true)
+                            .withRestartPolicy(RestartPolicy.alwaysRestart())
+                            .withPortBindings(PortBinding.parse(":44447:" + CONTAINER_PORT))
+                    )
                     .withEnv("PORT=4243",
                             String.format("DOCKER_DAEMON_ARGS=--insecure-registry %s:%s",
                                     d.getHost(), nginxContainer.getExposedPort()
                             ))
-                    .withPortBindings(PortBinding.parse(":44447:" + CONTAINER_PORT))
                     .withExposedPorts(new ExposedPort(CONTAINER_PORT))
                     .exec()
                     .getId();
@@ -114,9 +113,9 @@ public class NginxRegistryTest {
         }
     }
 
-    public NginxRegistryResource nginxContainer = new NginxRegistryResource();
+    private NginxRegistryResource nginxContainer = new NginxRegistryResource();
 
-    public class NginxRegistryResource extends DockerResource {
+    private class NginxRegistryResource extends DockerResource {
         private final String DATA_IMAGE_TAG = getClass().getSimpleName().toLowerCase();
         private final String HOST_CONTAINER_NAME = getClass().getCanonicalName() + "_host";
         public static final int CONTAINER_PORT = 80;
@@ -162,9 +161,10 @@ public class NginxRegistryTest {
 
             hostContainerId = d.getDockerCli().createContainerCmd(imageId)
                     .withName(HOST_CONTAINER_NAME)
-                    .withRestartPolicy(RestartPolicy.alwaysRestart())
-                    .withExtraHosts("registry:" + d.getHost())
-                    .withPortBindings(PortBinding.parse(Integer.toString(CONTAINER_PORT)))
+                    .withHostConfig(HostConfig.newHostConfig()
+                            .withRestartPolicy(RestartPolicy.alwaysRestart())
+                            .withExtraHosts("registry:" + d.getHost())
+                            .withPortBindings(PortBinding.parse(Integer.toString(CONTAINER_PORT))))
                     .exec()
                     .getId();
 
@@ -187,9 +187,9 @@ public class NginxRegistryTest {
         }
     }
 
-    public RegistryResource registryResource = new RegistryResource();
+    private RegistryResource registryResource = new RegistryResource();
 
-    public class RegistryResource extends DockerResource {
+    private class RegistryResource extends DockerResource {
         public final String REGISTRY_IMAGE_NAME = "registry:2.3.0";
         public final String HOST_CONTAINER_NAME = getClass().getCanonicalName() + "_host";
         public static final int CONTAINER_PORT = 5000;
@@ -209,10 +209,12 @@ public class NginxRegistryTest {
             d.getDockerCli().pullImageCmd(REGISTRY_IMAGE_NAME).exec(new PullImageResultCallback()).awaitSuccess();
 
             hostContainerId = d.getDockerCli().createContainerCmd(REGISTRY_IMAGE_NAME)
-                    .withRestartPolicy(RestartPolicy.alwaysRestart())
+                    .withHostConfig(HostConfig.newHostConfig()
+                            .withRestartPolicy(RestartPolicy.alwaysRestart())
+                            .withExtraHosts("registry:" + d.getHost())
+                            .withPortBindings(PortBinding.parse(String.format(":%d:%s",
+                                    44446, Integer.toString(CONTAINER_PORT)))))
                     .withName(HOST_CONTAINER_NAME)
-                    .withExtraHosts("registry:" + d.getHost())
-                    .withPortBindings(PortBinding.parse(String.format(":%d:%s", 44446, Integer.toString(CONTAINER_PORT))))
                     .exec()
                     .getId();
 
@@ -273,7 +275,7 @@ public class NginxRegistryTest {
                 .awaitSuccess();
     }
 
-//    @Test
+    //    @Test
     public void jenkinsPullWithAuth() {
 
     }

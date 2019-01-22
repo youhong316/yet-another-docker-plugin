@@ -2,27 +2,34 @@ package com.github.kostyasha.yad;
 
 import com.github.kostyasha.yad.commons.AbstractCloud;
 import com.github.kostyasha.yad.commons.DockerCreateContainer;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.CreateContainerCmd;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.StartContainerCmd;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.DockerException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.Container;
-import com.github.kostyasha.yad.docker_java.com.google.common.base.Throwables;
-import com.github.kostyasha.yad.docker_java.javax.ws.rs.ProcessingException;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.StringUtils;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.builder.ToStringBuilder;
+import com.github.kostyasha.yad.launcher.DockerComputerLauncher;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.DockerClient;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.InspectImageResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.StartContainerCmd;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.DockerException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Container;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Frame;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.LogContainerResultCallback;
+import com.github.kostyasha.yad_docker_java.com.google.common.base.Throwables;
+import com.github.kostyasha.yad_docker_java.javax.ws.rs.ProcessingException;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.StringUtils;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.builder.ToStringBuilder;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.slaves.Cloud;
-import hudson.slaves.ComputerLauncher;
 import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.util.FormValidation;
+import hudson.util.NullStream;
+import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
+import org.jenkinsci.plugins.cloudstats.TrackedPlannedNode;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.slf4j.Logger;
@@ -33,6 +40,7 @@ import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 
 import static java.util.Objects.isNull;
+import static org.jenkinsci.plugins.cloudstats.CloudStatistics.ProvisioningListener.get;
 
 /**
  * Docker Jenkins Cloud configuration. Contains connection configuration,
@@ -110,25 +119,33 @@ public class DockerCloud extends AbstractCloud implements Serializable {
                 LOG.warn("Bad template '{}' in cloud '{}': '{}'. Trying next template...",
                         t.getDockerContainerLifecycle().getImage(), getDisplayName(), e.getMessage(), e);
                 tryTemplates.remove(t);
+
                 continue;
             }
 
-            r.add(new PlannedNode(
-                    t.getDockerContainerLifecycle().getImage(),
-                    Computer.threadPoolForRemoting.submit(() -> {
-                        try {
-                            return provisionWithWait(t);
-                        } catch (Exception ex) {
-                            LOG.error("Error in provisioning; template='{}' for cloud='{}'",
-                                    t, getDisplayName(), ex);
-                            throw Throwables.propagate(ex);
-                        } finally {
-                            decrementAmiSlaveProvision(t);
-                        }
-                    }),
-                    t.getNumExecutors())
-            );
+            final ProvisioningActivity.Id id = new ProvisioningActivity.Id(getDisplayName(),
+                    t.getDockerContainerLifecycle().getImage());
 
+            r.add(new TrackedPlannedNode(
+                            id,
+                            t.getNumExecutors(),
+                            Computer.threadPoolForRemoting.submit(() -> {
+                                get().onStarted(id);
+                                try {
+                                    final DockerSlave dockerSlave = provisionWithWait(t, id);
+                                    get().onComplete(id, dockerSlave); //rename
+                                    return dockerSlave;
+                                } catch (Exception ex) {
+                                    LOG.error("Error in provisioning; template='{}' for cloud='{}'",
+                                            t, getDisplayName(), ex);
+                                    get().onFailure(id, ex);
+                                    throw Throwables.propagate(ex);
+                                } finally {
+                                    decrementAmiSlaveProvision(t);
+                                }
+                            })
+                    )
+            );
             excessWorkload -= t.getNumExecutors();
         }
 
@@ -148,7 +165,7 @@ public class DockerCloud extends AbstractCloud implements Serializable {
         CreateContainerCmd containerConfig = getClient().createContainerCmd(image);
 
         // template specific options
-        dockerCreateContainer.fillContainerConfig(containerConfig);
+        dockerCreateContainer.fillContainerConfig(containerConfig, null);
 
         // launcher specific options
         slaveTemplate.getLauncher().appendContainerConfig(slaveTemplate, containerConfig);
@@ -160,10 +177,27 @@ public class DockerCloud extends AbstractCloud implements Serializable {
         CreateContainerResponse response = containerConfig.exec();
         String containerId = response.getId();
         LOG.debug("Created container {}, for {}", containerId, getDisplayName());
+
+        slaveTemplate.getLauncher().afterContainerCreate(getClient(), containerId);
+
         // start
         StartContainerCmd startCommand = getClient().startContainerCmd(containerId);
-        startCommand.exec();
-        LOG.debug("Run container {}, for {}", containerId, getDisplayName());
+        try {
+            startCommand.exec();
+            LOG.debug("Running container {}, for {}", containerId, getDisplayName());
+        } catch (Exception ex) {
+            try {
+                getClient().logContainerCmd(containerId)
+                        .withStdErr(true)
+                        .withStdOut(true)
+                        .exec(new MyLogContainerResultCallback())
+                        .awaitCompletion();
+            } catch (Throwable t) {
+                LOG.warn("Can't get logs for container start", t);
+            }
+
+            throw ex;
+        }
 
         return containerId;
     }
@@ -171,11 +205,10 @@ public class DockerCloud extends AbstractCloud implements Serializable {
     /**
      * Cloud specific container config options
      */
+
     private void appendContainerConfig(DockerSlaveTemplate slaveTemplate, CreateContainerCmd containerConfig) {
         Map<String, String> labels = containerConfig.getLabels();
-        if (labels == null) {
-            labels = new HashMap<>();
-        }
+        if (labels == null) labels = new HashMap<>();
 
         labels.put(DOCKER_CLOUD_LABEL, getDisplayName());
         labels.put(DOCKER_TEMPLATE_LABEL, slaveTemplate.getId());
@@ -186,14 +219,21 @@ public class DockerCloud extends AbstractCloud implements Serializable {
     /**
      * Provision slave container and wait for it's availability.
      */
-    private DockerSlave provisionWithWait(DockerSlaveTemplate template) throws IOException, Descriptor.FormException {
+    private DockerSlave provisionWithWait(DockerSlaveTemplate template, ProvisioningActivity.Id id)
+            throws Exception {
         final DockerContainerLifecycle dockerContainerLifecycle = template.getDockerContainerLifecycle();
         final String imageId = dockerContainerLifecycle.getImage();
+        final DockerComputerLauncher computerLauncher = template.getLauncher();
 
         //pull image
-        dockerContainerLifecycle.getPullImage().exec(getClient(), imageId);
+        dockerContainerLifecycle.getPullImage().exec(getClient(), imageId, new StreamTaskListener(new NullStream()));
 
-        LOG.info("Trying to run container for {}", imageId);
+        // set the operating system if it's not already cached
+        if (template.getOsType() == null) {
+            template.setOsType(determineOsType(imageId));
+        }
+
+        LOG.debug("Trying to run container for {}, operating system {}", imageId, template.getOsType());
         final String containerId = runContainer(template);
 
         InspectContainerResponse ir;
@@ -216,11 +256,31 @@ public class DockerCloud extends AbstractCloud implements Serializable {
 
         String slaveName = String.format("%s-%s", getDisplayName(), containerId.substring(0, 12));
 
-        template.getLauncher().waitUp(getDisplayName(), template, ir);
+        if (computerLauncher.waitUp(getDisplayName(), template, ir)) {
+            LOG.debug("Container {} is ready for slave connection", containerId);
+        } else {
+            LOG.error("Container {} is not ready for slave connection.", containerId);
+        }
 
-        final ComputerLauncher launcher = template.getLauncher().getPreparedLauncher(getDisplayName(), template, ir);
+        final DockerComputerLauncher launcher = computerLauncher.getPreparedLauncher(getDisplayName(), template, ir);
+        return new DockerSlave(slaveName, nodeDescription, launcher, containerId, template, getDisplayName(), id);
+    }
 
-        return new DockerSlave(slaveName, nodeDescription, launcher, containerId, template, getDisplayName());
+    /**
+     * Determine the operating system associated with an image.
+     */
+    private OsType determineOsType(String imageId) {
+        InspectImageResponse ir = getClient().inspectImageCmd(imageId).exec();
+        if ("linux".equalsIgnoreCase(ir.getOs())) {
+            LOG.trace("Detected LINUX operating system for image: {}", imageId);
+            return OsType.LINUX;
+        } else if ("windows".equalsIgnoreCase(ir.getOs())) {
+            LOG.trace("Detected WINDOWS operating system for image: {}", imageId);
+            return OsType.WINDOWS;
+        } else {
+            LOG.trace("Detected OTHER operating system ({}) for image: {}", ir.getOs(), imageId);
+            return OsType.OTHER;
+        }
     }
 
     /**
@@ -294,7 +354,7 @@ public class DockerCloud extends AbstractCloud implements Serializable {
 
     //    @CheckForNull
     public static DockerCloud getCloudByName(String name) {
-        final Cloud cloud = Jenkins.getActiveInstance().getCloud(name);
+        final Cloud cloud = Jenkins.getInstance().getCloud(name);
         if (cloud instanceof DockerCloud) {
             return (DockerCloud) cloud;
         }
@@ -357,9 +417,31 @@ public class DockerCloud extends AbstractCloud implements Serializable {
             return FormValidation.ok();
         }
 
+        public List<Descriptor> getTemplatesDescriptors() {
+            return Arrays.asList(jenkins.model.Jenkins.getInstance().getDescriptor(DockerSlaveTemplate.class));
+        }
+
+        @Nonnull
         @Override
         public String getDisplayName() {
             return "Yet Another Docker";
+        }
+    }
+
+    private static class MyLogContainerResultCallback extends LogContainerResultCallback {
+        private ArrayList<String> logLines = new ArrayList<>();
+
+        @SuppressFBWarnings(value = "DM_DEFAULT_ENCODING")
+        @Override
+        public void onNext(Frame item) {
+            final String line = new String(item.getPayload()).trim();
+            logLines.add(line);
+            LOG.debug("Log container: {}", line);
+            super.onNext(item);
+        }
+
+        public ArrayList<String> getLogLines() {
+            return logLines;
         }
     }
 }

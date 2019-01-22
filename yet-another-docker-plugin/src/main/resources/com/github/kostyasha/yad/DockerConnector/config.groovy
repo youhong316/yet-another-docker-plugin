@@ -29,6 +29,14 @@ f.entry(title: "Type", field: "connectorType") {
     }
 }
 
+f.entry(title: _("Connect timeout"), field: "connectTimeout", default: "0") {
+    f.number()
+}
+
+f.entry(title: _("Read timeout"), field: "readTimeout", default: "0") {
+    f.number()
+}
+
 f.validateButton(title: _("Test Connection"), progress: _("Testing..."),
         method: "testConnection",
         with: "serverUrl,credentialsId,version,connectorType"

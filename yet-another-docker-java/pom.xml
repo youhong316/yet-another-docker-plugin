@@ -19,8 +19,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <shade-prefix>com.github.kostyasha.yad.docker_java</shade-prefix>
-        <maven-shade-plugin.version>3.0-kostyasha</maven-shade-plugin.version>
+        <shade-prefix>com.github.kostyasha.yad_docker_java</shade-prefix>
+        <maven-shade-plugin.version>3.2.0</maven-shade-plugin.version>
     </properties>
 
     <repositories>
@@ -47,23 +47,23 @@
             <id>repo.jenkins-ci.org</id>
             <url>https://repo.jenkins-ci.org/public/</url>
         </pluginRepository>
-        <pluginRepository>
-            <id>bintray</id>
-            <url>https://dl.bintray.com/kostyasha/maven-plugins</url>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </pluginRepository>
+        <!--<pluginRepository>-->
+            <!--<id>bintray</id>-->
+            <!--<url>https://dl.bintray.com/kostyasha/maven-plugins</url>-->
+            <!--<releases>-->
+                <!--<enabled>true</enabled>-->
+            <!--</releases>-->
+            <!--<snapshots>-->
+                <!--<enabled>false</enabled>-->
+            <!--</snapshots>-->
+        <!--</pluginRepository>-->
     </pluginRepositories>
 
     <dependencies>
         <dependency>
             <groupId>com.github.docker-java</groupId>
             <artifactId>docker-java</artifactId>
-            <version>3.0.4</version>
+            <version>3.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -74,8 +74,8 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>jcl-over-slf4j</artifactId>
-            <version>1.7.12</version>
-            <scope>provided</scope>
+            <version>1.7.21</version>
+            <!--<scope>provided</scope>-->
         </dependency>
     </dependencies>
 
@@ -94,7 +94,7 @@
                         <configuration>
                             <rules>
                                 <requireMavenVersion>
-                                    <version>[3.1,3.2.5]</version>
+                                    <version>[3.1,3.2.5],[3.5.0,)</version>
                                 </requireMavenVersion>
                             </rules>
                         </configuration>
@@ -127,7 +127,7 @@
                     </filters>
                     <artifactSet>
                         <excludes>
-                            <exclude>org.slf4j:*</exclude>
+                            <!--<exclude>org.slf4j:*</exclude>-->
                             <exclude>log4j:*</exclude>
                             <!--<exclude>commons-logging:*</exclude>-->
                         </excludes>
@@ -163,7 +163,7 @@
                             <shadedPattern>${shade-prefix}.org.apache.commons</shadedPattern>
                         </relocation>
 
-                        <!-- com.github.kostyasha.yad.docker_java.org.glassfish.jersey.internal.RuntimeDelegateImpl could not be instantiated:
+                        <!-- com.github.kostyasha.yad_docker_java.org.glassfish.jersey.internal.RuntimeDelegateImpl could not be instantiated:
                          java.lang.IllegalStateException: No generator was provided and there is no default
                          generator registered -->
                         <relocation>
@@ -214,13 +214,18 @@
                             <pattern>de.gesellix.socketfactory.unix</pattern>
                             <shadedPattern>${shade-prefix}.de.gesellix.socketfactory.unix</shadedPattern>
                         </relocation>
-                        <relocation>
-                            <pattern>org.newsclub.net.unix</pattern>
-                            <shadedPattern>${shade-prefix}.org.newsclub.net.unix</shadedPattern>
-                        </relocation>
+                        <!--<relocation>-->
+                            <!--<pattern>org.newsclub</pattern>-->
+                            <!--<shadedPattern>${shade-prefix}.org.newsclub</shadedPattern>-->
+                        <!--</relocation>-->
                         <relocation>
                             <pattern>socketfactory.spi</pattern>
                             <shadedPattern>${shade-prefix}.socketfactory.spi</shadedPattern>
+                        </relocation>
+                        <!-- unix socket -->
+                        <relocation>
+                            <pattern>org.scijava</pattern>
+                            <shadedPattern>${shade-prefix}.org.scijava</shadedPattern>
                         </relocation>
 
                         <!-- docker-java forked jersey -->

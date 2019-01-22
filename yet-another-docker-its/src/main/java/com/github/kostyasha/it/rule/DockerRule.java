@@ -5,35 +5,35 @@ import com.github.kostyasha.it.other.JenkinsDockerImage;
 import com.github.kostyasha.it.other.WaitMessageResultCallback;
 import com.github.kostyasha.it.utils.DockerHPIContainerUtil;
 import com.github.kostyasha.yad.commons.DockerImagePullStrategy;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.DockerClient;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.DockerCmdExecFactory;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.command.InspectImageResponse;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.exception.NotFoundException;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.BuildResponseItem;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.Container;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.ExposedPort;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.Image;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.PortBinding;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.Ports;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.api.model.VolumesFrom;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DockerClientBuilder;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.LocalDirectorySSLConfig;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.NameParser;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.command.PullImageResultCallback;
-import com.github.kostyasha.yad.docker_java.com.github.dockerjava.jaxrs.JerseyDockerCmdExecFactory;
-import com.github.kostyasha.yad.docker_java.com.google.common.collect.Iterables;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.codec.digest.DigestUtils;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.io.FileUtils;
-import com.github.kostyasha.yad.docker_java.org.apache.commons.lang.StringUtils;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.DockerClient;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.CreateContainerResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.DockerCmdExecFactory;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.command.InspectImageResponse;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.exception.NotFoundException;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.BuildResponseItem;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Container;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.ExposedPort;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.HostConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Image;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.PortBinding;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.Ports;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.api.model.VolumesFrom;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DefaultDockerClientConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DockerClientBuilder;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.LocalDirectorySSLConfig;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.NameParser;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.BuildImageResultCallback;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.command.PullImageResultCallback;
+import com.github.kostyasha.yad_docker_java.com.github.dockerjava.jaxrs.JerseyDockerCmdExecFactory;
+import com.github.kostyasha.yad_docker_java.com.google.common.collect.Iterables;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.codec.digest.DigestUtils;
+import com.github.kostyasha.yad_docker_java.org.apache.commons.lang.StringUtils;
 import hudson.cli.CLI;
 import hudson.cli.CLIConnectionFactory;
 import hudson.cli.DockerCLI;
+import org.apache.commons.io.FileUtils;
 import org.apache.maven.settings.building.SettingsBuildingException;
-import org.hamcrest.MatcherAssert;
 import org.jenkinsci.plugins.docker.commons.credentials.DockerServerCredentials;
 import org.junit.rules.ExternalResource;
 import org.junit.runner.Description;
@@ -53,14 +53,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import static com.github.kostyasha.it.other.JenkinsDockerImage.JENKINS_DEFAULT;
-import static com.github.kostyasha.yad.docker_java.com.github.dockerjava.core.DefaultDockerClientConfig.createDefaultConfigBuilder;
+import static com.github.kostyasha.yad_docker_java.com.github.dockerjava.core.DefaultDockerClientConfig.createDefaultConfigBuilder;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.commons.io.FileUtils.deleteDirectory;
+import static org.apache.commons.io.FileUtils.writeStringToFile;
 import static org.codehaus.plexus.util.FileUtils.copyFile;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
@@ -81,7 +82,7 @@ public class DockerRule extends ExternalResource {
 //            + "-agentlib:jdwp=transport=dt_socket,server=n,address=192.168.99.1:5005,suspend=y "
             + "-Dhudson.remoting.Launcher.pingIntervalSec=-1 "
             + "-Dhudson.model.UpdateCenter.never=true "
-            + "-Dhudson.model.LoadStatistics.clock=1000 "
+//            + "-Dhudson.model.LoadStatistics.clock=1000 "
 //            + "-verbose:class "
             ;
     public static final String YAD_PLUGIN_NAME = "yet-another-docker-plugin";
@@ -148,7 +149,12 @@ public class DockerRule extends ExternalResource {
         // if image was specified without tag, then treat as latest
         final String fullImageName = repostag.repos + ":" + (repostag.tag.isEmpty() ? "latest" : repostag.tag);
 
-        boolean hasImage = Iterables.any(images, image -> Arrays.asList(image.getRepoTags()).contains(fullImageName));
+        boolean hasImage = Iterables.any(
+                images, image ->
+                        nonNull(image.getRepoTags()) &&
+                                Arrays.asList(image.getRepoTags()).contains(fullImageName)
+
+        );
 
         boolean pull = hasImage ?
                 pullStrategy.pullIfExists(imageName) :
@@ -174,7 +180,9 @@ public class DockerRule extends ExternalResource {
         clientConfig = createDefaultConfigBuilder()
                 .build();
 
-        dockerCmdExecFactory = new JerseyDockerCmdExecFactory();
+        dockerCmdExecFactory = new JerseyDockerCmdExecFactory()
+                .withConnectTimeout(10 * 1000)
+                .withReadTimeout(100 * 1000);
 
         dockerClient = DockerClientBuilder.getInstance(clientConfig)
                 .withDockerCmdExecFactory(dockerCmdExecFactory)
@@ -277,10 +285,12 @@ public class DockerRule extends ExternalResource {
         OUTER:
         for (Image image : images) {
             final String[] repoTags = image.getRepoTags();
-            for (String repoTag : repoTags) {
-                if (repoTag.equals(imageName)) {
-                    existedDataImage = image.getId();
-                    break OUTER;
+            if (nonNull(repoTags)) {
+                for (String repoTag : repoTags) {
+                    if (repoTag.equals(imageName)) {
+                        existedDataImage = image.getId();
+                        break OUTER;
+                    }
                 }
             }
         }
@@ -318,7 +328,10 @@ public class DockerRule extends ExternalResource {
      * Path ends with '/';
      */
     public static String getDockerItDir() {
-        return targetDir().getAbsolutePath() + "/docker-it/";
+        final String dockerItDir = targetDir().getAbsolutePath() + "/docker-it/";
+        final File dir = new File(dockerItDir);
+        dir.mkdirs();
+        return dockerItDir;
     }
 
     @Nonnull
@@ -366,7 +379,7 @@ public class DockerRule extends ExternalResource {
 //        final File tempDirectory = TempFileHelper.createTempDirectory("build-image", targetDir().toPath());
         final File buildDir = new File(targetDir().getAbsolutePath() + "/docker-it/build-image");
         if (buildDir.exists()) {
-            FileUtils.deleteDirectory(buildDir);
+            deleteDirectory(buildDir);
         }
         if (!buildDir.mkdirs()) {
             throw new IllegalStateException("Can't create temp directory " + buildDir.getAbsolutePath());
@@ -374,11 +387,13 @@ public class DockerRule extends ExternalResource {
 
         final String dockerfile = generateDockerfileFor(plugins);
         final File dockerfileFile = new File(buildDir, "Dockerfile");
-        FileUtils.writeStringToFile(dockerfileFile, dockerfile);
+        writeStringToFile(dockerfileFile, dockerfile);
 
         final File buildHomePath = new File(buildDir, JenkinsDockerImage.JENKINS_DEFAULT.homePath);
         final File jenkinsConfig = new File(buildHomePath, "config.xml");
         DockerHPIContainerUtil.copyResourceFromClass(DockerHPIContainerUtil.class, "config.xml", jenkinsConfig);
+        writeStringToFile(new File(buildHomePath, "jenkins.install.UpgradeWizard.state"), "2.19.4");
+        writeStringToFile(new File(buildHomePath, "jenkins.install.InstallUtil.lastExecVersion"), "2.19.4");
 
         final File pluginDir = new File(buildHomePath, "/plugins/");
         if (!pluginDir.mkdirs()) {
@@ -457,11 +472,12 @@ public class DockerRule extends ExternalResource {
                 .withEnv(CONTAINER_JAVA_OPTS)
                 .withExposedPorts(new ExposedPort(JENKINS_DEFAULT.tcpPort))
                 .withPortSpecs(String.format("%d/tcp", JENKINS_DEFAULT.tcpPort))
-                .withPortBindings(PortBinding.parse("0.0.0.0:48000:48000"))
-//                .withPortBindings(PortBinding.parse("0.0.0.0:48000:48000"), PortBinding.parse("0.0.0.0:50000:50000"))
-                .withVolumesFrom(new VolumesFrom(dataContainerId))
+                .withHostConfig(HostConfig.newHostConfig()
+                        .withPortBindings(PortBinding.parse("0.0.0.0:48000:48000"))
+                        .withVolumesFrom(new VolumesFrom(dataContainerId))
+                        .withPublishAllPorts(true))
                 .withLabels(labels)
-                .withPublishAllPorts(true)
+//                .withPortBindings(PortBinding.parse("0.0.0.0:48000:48000"), PortBinding.parse("0.0.0.0:50000:50000"))
                 .exec()
                 .getId();
         provisioned.add(id);

@@ -1,9 +1,11 @@
 package com.github.kostyasha.yad.strategy;
 
+import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
+import hudson.model.OneOffExecutor;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
@@ -14,12 +16,11 @@ import hudson.util.TimeUnit2;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.durabletask.executors.ContinuableExecutable;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.util.concurrent.Future;
 
@@ -54,6 +55,7 @@ public class DockerOnceRetentionStrategy extends CloudRetentionStrategy implemen
     }
 
     @Override
+    @GuardedBy("hudson.model.Queue.lock")
     public long check(final AbstractCloudComputer acc) {
         // When the slave is idle we should disable accepting tasks and check to see if it is already trying to
         // terminate. If it's not already trying to terminate then lets terminate manually.
@@ -91,9 +93,14 @@ public class DockerOnceRetentionStrategy extends CloudRetentionStrategy implemen
         done(executor);
     }
 
-    private void done(Executor executor) {
+    protected void done(Executor executor) {
         final AbstractCloudComputer<?> c = (AbstractCloudComputer) executor.getOwner();
         Queue.Executable exec = executor.getCurrentExecutable();
+        if (executor instanceof OneOffExecutor) {
+            LOG.debug("Not terminating {} because {} was a flyweight task", c.getName(), exec);
+            return;
+        }
+
         if (exec instanceof ContinuableExecutable && ((ContinuableExecutable) exec).willContinue()) {
             LOG.debug("not terminating {} because {} says it will be continued", c.getName(), exec);
             return;
@@ -103,7 +110,7 @@ public class DockerOnceRetentionStrategy extends CloudRetentionStrategy implemen
         done(c);
     }
 
-    private void done(final AbstractCloudComputer<?> c) {
+    protected void done(final AbstractCloudComputer<?> c) {
         c.setAcceptingTasks(false); // just in case
         synchronized (this) {
             if (terminating) {
@@ -112,20 +119,19 @@ public class DockerOnceRetentionStrategy extends CloudRetentionStrategy implemen
             terminating = true;
         }
 
-        final Future<?> submit = Computer.threadPoolForRemoting.submit(() ->
-                Queue.withLock(() -> {
-                    try {
-                        AbstractCloudSlave node = c.getNode();
-                        if (node != null) {
-                            node.terminate();
-                        }
-                    } catch (InterruptedException | IOException e) {
-                        LOG.warn("Failed to terminate " + c.getName(), e);
-                        synchronized (DockerOnceRetentionStrategy.this) {
-                            terminating = false;
-                        }
+        final Future<?> submit = Computer.threadPoolForRemoting.submit(() -> {
+                try {
+                    AbstractCloudSlave node = c.getNode();
+                    if (node != null) {
+                        node.terminate();
                     }
-                })
+                } catch (InterruptedException | IOException e) {
+                    LOG.warn("Failed to terminate " + c.getName(), e);
+                    synchronized (DockerOnceRetentionStrategy.this) {
+                        terminating = false;
+                    }
+                }
+            }
         );
     }
 
@@ -149,14 +155,7 @@ public class DockerOnceRetentionStrategy extends CloudRetentionStrategy implemen
                 .toHashCode();
     }
 
-    @Override
-    public DescriptorImpl getDescriptor() {
-        return DESCRIPTOR;
-    }
-
-    @Restricted(NoExternalUse.class)
-    public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
-
+    @Extension
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
         @Override
         public String getDisplayName() {
